@@ -119,7 +119,7 @@ endif
 ############ UAPI ############
 UAPI_DIR :=	uapi
 UAPI_INC :=	-I$(AUDIO_ROOT)/include/$(UAPI_DIR)
-MOT_INC  :=	-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include
+MOT_INC  :=	-I$(ANDROID_BUILD_TOP)/motorola/kernel/modules/include -I$(ANDROID_BUILD_TOP)/vendor/cirrus/audio/dlkm/include
 
 ############ COMMON ############
 COMMON_DIR :=	include
