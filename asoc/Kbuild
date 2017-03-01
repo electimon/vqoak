@@ -116,7 +116,7 @@ endif
 
 ############ UAPI ############
 UAPI_DIR :=	uapi
-UAPI_INC :=	-I$(AUDIO_ROOT)/include/$(UAPI_DIR)
+UAPI_INC :=	-I$(AUDIO_ROOT)/include/$(UAPI_DIR) -I$(ANDROID_BUILD_TOP)/vendor/cirrus/audio/dlkm/include -I$(ANDROID_BUILD_TOP)/vendor/cirrus/audio/dlkm/sound/soc
 
 ############ COMMON ############
 COMMON_DIR :=	include
