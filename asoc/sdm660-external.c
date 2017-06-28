@@ -1187,6 +1187,7 @@ end:
 }
 EXPORT_SYMBOL(msm_snd_cpe_hw_params);
 
+#ifndef CONFIG_SND_SOC_MADERA
 static int msm_afe_set_config(struct snd_soc_codec *codec)
 {
 	int rc;
@@ -1278,6 +1279,7 @@ static int msm_afe_set_config(struct snd_soc_codec *codec)
 
 	return 0;
 }
+#endif
 
 static void msm_afe_clear_config(void)
 {
@@ -1356,12 +1358,13 @@ static int msm_adsp_power_up_config(struct snd_soc_codec *codec,
 	if (socinfo_get_id() == SDM660_SOC_MSM_ID) {
 		msm_snd_interrupt_config(pdata);
 	}
-
+#ifndef CONFIG_SND_SOC_MADERA
 	ret = msm_afe_set_config(codec);
 	if (ret)
 		pr_err("%s: Failed to set AFE config. err %d\n",
 			__func__, ret);
 
+#endif
 	return 0;
 
 err_fail:
