@@ -38,6 +38,10 @@
 #include "msm-dolby-dap-config.h"
 #include "msm-ds2-dap-config.h"
 
+#ifdef CONFIG_CIRRUS_PLAYBACK
+#include <sound/msm-cirrus-playback.h>
+#endif
+
 #define DRV_NAME "msm-pcm-routing-v2"
 
 #ifndef CONFIG_DOLBY_DAP
@@ -31438,6 +31442,9 @@ static int msm_routing_probe(struct snd_soc_component *component)
 	snd_soc_add_component_controls(component, mclk_src_controls,
 				      ARRAY_SIZE(mclk_src_controls));
 
+#ifdef CONFIG_CIRRUS_PLAYBACK
+	msm_crus_pb_add_controls(platform);
+#endif
 	return 0;
 }
 
