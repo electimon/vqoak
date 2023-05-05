@@ -1,0 +1,1 @@
+cmd_../../vendor/qcom/opensource/audio-kernel/dsp/codecs/built-in.o :=  rm -f ../../vendor/qcom/opensource/audio-kernel/dsp/codecs/built-in.o; ar rcsD ../../vendor/qcom/opensource/audio-kernel/dsp/codecs/built-in.o

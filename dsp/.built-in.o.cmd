@@ -1,0 +1,1 @@
+cmd_../../vendor/qcom/opensource/audio-kernel/dsp/built-in.o :=  ld -m elf_x86_64   -r -o ../../vendor/qcom/opensource/audio-kernel/dsp/built-in.o ../../vendor/qcom/opensource/audio-kernel/dsp/codecs/built-in.o 

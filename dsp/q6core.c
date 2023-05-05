@@ -678,12 +678,10 @@ int q6core_get_avcs_api_version_per_service(uint32_t service_id)
         ret = q6core_get_avcs_fwk_version();
         if (ret < 0) {
             /* Look in legacy support */
-            if (ret == -EOPNOTSUPP)
-                ret = q6core_get_legacy_avcs_fwk_version(service_id);
-            else
+            ret = q6core_get_legacy_avcs_fwk_version(service_id);
+            if (ret < 0)
                 pr_err("%s: failure in getting AVCS version\n", __func__);
-
-            return ret;
+                return ret;
         }
 
 	cached_ver_info = q6core_lcl.q6core_avcs_ver_info.ver_info;

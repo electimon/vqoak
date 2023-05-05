@@ -37,12 +37,16 @@
 
 static struct snd_soc_card snd_soc_card_msm_card_tavil = {
 	.name = "sdm670-tavil-snd-card",
+#ifndef CONFIG_SND_SOC_MADERA
 	.late_probe = msm_snd_card_tavil_late_probe,
+#endif
 };
 
 static struct snd_soc_card snd_soc_card_msm_card_tasha = {
 	.name = "sdm670-tasha-snd-card",
+#ifndef CONFIG_SND_SOC_MADERA
 	.late_probe = msm_snd_card_tasha_late_probe,
+#endif
 };
 
 static struct snd_soc_card snd_soc_card_msm_card_madera;
@@ -69,12 +73,14 @@ static struct snd_soc_ops msm_aux_pcm_be_ops = {
 	.shutdown = msm_aux_pcm_snd_shutdown,
 };
 
+#ifndef CONFIG_SND_SOC_MADERA
 #ifdef CONFIG_SND_SOC_QCOM_TDM
 static struct snd_soc_ops msm_tdm_be_ops = {
 	.startup = msm_tdm_snd_startup,
 	.shutdown = msm_tdm_snd_shutdown,
 	.hw_params = msm_tdm_snd_hw_params,
 };
+#endif
 #endif
 
 static int msm_wcn_init(struct snd_soc_pcm_runtime *rtd)
