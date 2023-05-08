@@ -1974,7 +1974,7 @@ int msm_madera_init(struct snd_soc_pcm_runtime *rtd)
 		return ret;
 	}
 
-	ret = snd_soc_codec_set_sysclk(codec, MADERA_CLK_SYSCLK_1,
+	ret = snd_soc_codec_set_sysclk(codec, MADERA_CLK_SYSCLK,
 			MADERA_CLK_SRC_FLL1, CS47L35_SYSCLK_RATE,
 			SND_SOC_CLOCK_IN);
 	if (ret != 0) {
@@ -2030,9 +2030,9 @@ int msm_madera_init(struct snd_soc_pcm_runtime *rtd)
 #ifdef CONFIG_SND_SOC_CS47L90
 	/* Toggle PDM_CLK GPIO */
 	for (i = 0; i < 5; i++) {
-		snd_soc_write(codec, MADERA_GPIO37_CTRL_1, 0xA001);
+		snd_soc_write(codec, 0x1748, 0xA001);
 		usleep_range(1000, 1100);
-		snd_soc_write(codec, MADERA_GPIO37_CTRL_1, 0x2001);
+		snd_soc_write(codec, 0x1748, 0x2001);
 		usleep_range(1000, 1100);
 	}
 #else

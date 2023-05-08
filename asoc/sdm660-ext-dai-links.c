@@ -421,6 +421,23 @@ static const struct snd_soc_pcm_stream cs35l35_params = {
 	.channels_max = 2,
 };
 
+static const struct snd_soc_pcm_stream cs35l36_params[] = {
+	{
+		.formats = SNDRV_PCM_FMTBIT_S16_LE,
+		.rate_min = 48000,
+		.rate_max = 48000,
+		.channels_min = 2,
+		.channels_max = 2,  /* 2 channels for 1.536MHz SCLK */
+	},
+	{
+		.formats = SNDRV_PCM_FMTBIT_S16_LE,
+		.rate_min = 96000,
+		.rate_max = 96000,
+		.channels_min = 2,
+		.channels_max = 2, /* 2 channels for 3.072MHz SCLK */
+	},
+};
+
 static int cs35l35_dai_init(struct snd_soc_pcm_runtime *rtd)
 {
 	int ret;
@@ -430,7 +447,7 @@ static int cs35l35_dai_init(struct snd_soc_pcm_runtime *rtd)
 	struct snd_soc_dai *aif1_dai = rtd->cpu_dai;
 	struct snd_soc_dai *cs35l35_dai = rtd->codec_dai;
 
-	ret = snd_soc_dai_set_sysclk(aif1_dai, MADERA_CLK_SYSCLK_1, 0, 0);
+	ret = snd_soc_dai_set_sysclk(aif1_dai, MADERA_CLK_SYSCLK_3, 0, 0);
 	if (ret != 0) {
 		dev_err(codec->dev, "Failed to set SYSCLK %d\n", ret);
 		return ret;
@@ -730,7 +747,8 @@ static struct snd_soc_dai_link msm_ext_madera_be_dai[] = {
 		.no_pcm = 1,
 		.ignore_pmdown_time = 1,
 		.ignore_suspend = 1,
-		.params = &cs35l35_params,
+		.params = &cs35l36_params[0],
+		.num_params = ARRAY_SIZE(cs35l36_params),
 	}
 #endif
 };
