@@ -31443,7 +31443,7 @@ static int msm_routing_probe(struct snd_soc_component *component)
 				      ARRAY_SIZE(mclk_src_controls));
 
 #ifdef CONFIG_CIRRUS_PLAYBACK
-	msm_crus_pb_add_controls(platform);
+//	msm_crus_pb_add_controls(component);
 #endif
 	return 0;
 }

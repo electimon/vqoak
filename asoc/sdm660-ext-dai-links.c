@@ -15,7 +15,8 @@
 #include <asoc/core.h>
 #include "codecs/wcd9335.h"
 #include <linux/pm_qos.h>
-
+#include "codecs/madera.h"
+#include <linux/mfd/madera/registers.h>
 #define DEV_NAME_STR_LEN            32
 #define __CHIPSET__ "SDM660 "
 #define MSM_DAILINK_NAME(name) (__CHIPSET__#name)
@@ -29,12 +30,16 @@
 
 static struct snd_soc_card snd_soc_card_msm_card_tavil = {
 	.name = "sdm670-tavil-snd-card",
+#ifndef CONFIG_SND_SOC_MADERA
 	.late_probe = msm_snd_card_tavil_late_probe,
+#endif
 };
 
 static struct snd_soc_card snd_soc_card_msm_card_tasha = {
 	.name = "sdm670-tasha-snd-card",
+#ifndef CONFIG_SND_SOC_MADERA
 	.late_probe = msm_snd_card_tasha_late_probe,
+#endif
 };
 
 static struct snd_soc_card snd_soc_card_msm_card_madera;
@@ -61,12 +66,14 @@ static struct snd_soc_ops msm_aux_pcm_be_ops = {
 	.shutdown = msm_aux_pcm_snd_shutdown,
 };
 
+#ifndef CONFIG_SND_SOC_MADERA
 #ifdef CONFIG_SND_SOC_QCOM_TDM
 static struct snd_soc_ops msm_tdm_be_ops = {
 	.startup = msm_tdm_snd_startup,
 	.shutdown = msm_tdm_snd_shutdown,
 	.hw_params = msm_tdm_snd_hw_params,
 };
+#endif
 #endif
 
 static int msm_wcn_init(struct snd_soc_pcm_runtime *rtd)
@@ -407,33 +414,58 @@ static const struct snd_soc_pcm_stream cs35l35_params = {
 	.channels_max = 2,
 };
 
+static const struct snd_soc_pcm_stream cs35l36_params[] = {
+	{
+		.formats = SNDRV_PCM_FMTBIT_S16_LE,
+		.rate_min = 48000,
+		.rate_max = 48000,
+		.channels_min = 2,
+		.channels_max = 2,  /* 2 channels for 1.536MHz SCLK */
+	},
+	{
+		.formats = SNDRV_PCM_FMTBIT_S16_LE,
+		.rate_min = 96000,
+		.rate_max = 96000,
+		.channels_min = 2,
+		.channels_max = 2, /* 2 channels for 3.072MHz SCLK */
+	},
+};
+
 static int cs35l35_dai_init(struct snd_soc_pcm_runtime *rtd)
 {
 	int ret;
 	int codec_clock = CS35L35_MCLK_RATE;
-	struct snd_soc_codec *codec = rtd->codec;
-	struct snd_soc_dapm_context *dapm = snd_soc_codec_get_dapm(codec);
-	struct snd_soc_dai *aif1_dai = rtd->cpu_dai;
-	struct snd_soc_dai *cs35l35_dai = rtd->codec_dai;
+	struct snd_soc_component *component =
+		snd_soc_rtdcom_lookup(rtd, "cs47l90-codec");
+	struct snd_soc_dai *codec_dai = rtd->cpu_dai;
+	struct snd_soc_dai *amp_dai = rtd->codec_dai;
+	struct snd_soc_dapm_context *dapm;
 
-	ret = snd_soc_dai_set_sysclk(aif1_dai, MADERA_CLK_SYSCLK_1, 0, 0);
+	if (!component) {
+		pr_err("* %s: No match for %s component\n", __func__,
+			"cs47l90-codec");
+		return -1;
+	}
+	dapm = snd_soc_component_get_dapm(component);
+
+	ret = snd_soc_dai_set_sysclk(codec_dai, MADERA_CLK_SYSCLK_3, 0, 0);
 	if (ret != 0) {
-		dev_err(codec->dev, "Failed to set SYSCLK %d\n", ret);
+		dev_err(component->dev, "Failed to set SYSCLK %d\n", ret);
 		return ret;
 	}
 
-	ret = snd_soc_dai_set_sysclk(cs35l35_dai, 0, CS35L35_SCLK_RATE, 0);
+	ret = snd_soc_dai_set_sysclk(amp_dai, 0, CS35L35_SCLK_RATE, 0);
 	if (ret != 0) {
-		dev_err(codec->dev, "Failed to set SCLK %d\n", ret);
+		dev_err(component->dev, "Failed to set SCLK %d\n", ret);
 		return ret;
 	}
 
 #ifdef CONFIG_SND_SOC_CS35L36
-	codec_clock = CS35L35_SCLK_RATE;
+	//codec_clock = CS35L35_SCLK_RATE;
 #endif
-	ret = snd_soc_codec_set_sysclk(codec, 0, 0, codec_clock, 0);
+	ret = snd_soc_component_set_sysclk(component, 0, 0, codec_clock, 0);
 	if (ret != 0) {
-		dev_err(codec->dev, "Failed to set MCLK %d\n", ret);
+		dev_err(component->dev, "Failed to set MCLK %d\n", ret);
 		return ret;
 	}
 	snd_soc_dapm_ignore_suspend(dapm, "AMP Playback");
@@ -716,7 +748,8 @@ static struct snd_soc_dai_link msm_ext_madera_be_dai[] = {
 		.no_pcm = 1,
 		.ignore_pmdown_time = 1,
 		.ignore_suspend = 1,
-		.params = &cs35l35_params,
+		.params = &cs35l36_params[0],
+		.num_params = ARRAY_SIZE(cs35l36_params),
 	}
 #endif
 };
@@ -1757,33 +1790,6 @@ static struct snd_soc_dai_link msm_ext_common_be_dai[] = {
 		.be_hw_params_fixup = msm_ext_be_hw_params_fixup,
 		.ignore_suspend = 1,
 		.ignore_pmdown_time = 1,
-	},
-	/* Proxy Tx BACK END DAI Link */
-	{
-		.name = LPASS_BE_PROXY_TX,
-		.stream_name = "Proxy Capture",
-		.cpu_dai_name = "msm-dai-q6-dev.8195",
-		.platform_name = "msm-pcm-routing",
-		.codec_name = "msm-stub-codec.1",
-		.codec_dai_name = "msm-stub-tx",
-		.no_pcm = 1,
-		.dpcm_capture = 1,
-		.id = MSM_BACKEND_DAI_PROXY_TX,
-		.ignore_suspend = 1,
-	},
-	/* Proxy Rx BACK END DAI Link */
-	{
-		.name = LPASS_BE_PROXY_RX,
-		.stream_name = "Proxy Playback",
-		.cpu_dai_name = "msm-dai-q6-dev.8194",
-		.platform_name = "msm-pcm-routing",
-		.codec_name = "msm-stub-codec.1",
-		.codec_dai_name = "msm-stub-rx",
-		.no_pcm = 1,
-		.dpcm_playback = 1,
-		.id = MSM_BACKEND_DAI_PROXY_RX,
-		.ignore_pmdown_time = 1,
-		.ignore_suspend = 1,
 	},
 	{
 		.name = LPASS_BE_USB_AUDIO_RX,

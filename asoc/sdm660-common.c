@@ -321,7 +321,9 @@ static char const *usb_sample_rate_text[] = {"KHZ_8", "KHZ_11P025",
 static char const *ext_disp_bit_format_text[] = {"S16_LE", "S24_LE"};
 static char const *ext_disp_sample_rate_text[] = {"KHZ_48", "KHZ_96",
 						  "KHZ_192"};
+#ifndef CONFIG_SND_SOC_MADERA
 static const char *const qos_text[] = {"Disable", "Enable"};
+#endif
 
 static SOC_ENUM_SINGLE_EXT_DECL(ext_disp_rx_chs, ch_text);
 static SOC_ENUM_SINGLE_EXT_DECL(proxy_rx_chs, ch_text);
@@ -382,10 +384,11 @@ static SOC_ENUM_SINGLE_EXT_DECL(tdm_rx_format, tdm_bit_format_text);
 static SOC_ENUM_SINGLE_EXT_DECL(tdm_rx_sample_rate, tdm_sample_rate_text);
 static SOC_ENUM_SINGLE_EXT_DECL(tdm_slot_num, tdm_slot_num_text);
 static SOC_ENUM_SINGLE_EXT_DECL(tdm_slot_width, tdm_slot_width_text);
+#ifndef CONFIG_SND_SOC_MADERA
 static SOC_ENUM_SINGLE_EXT_DECL(qos_vote, qos_text);
 
 static int qos_vote_status;
-
+#endif
 static struct afe_clk_set mi2s_clk[MI2S_MAX] = {
 	{
 		AFE_API_VERSION_I2S_CONFIG,
@@ -1676,7 +1679,6 @@ static int tdm_tx_ch_put(struct snd_kcontrol *kcontrol,
 	}
 	return ret;
 }
-#endif
 
 static int tdm_get_slot_num_val(int slot_num)
 {
@@ -1987,6 +1989,7 @@ static int tdm_tx_slot_mapping_put(struct snd_kcontrol *kcontrol,
 	}
 	return ret;
 }
+#endif
 
 static int aux_pcm_get_sample_rate(int value)
 {
@@ -2911,6 +2914,7 @@ static int ext_disp_rx_sample_rate_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+#ifndef CONFIG_SND_SOC_MADERA
 static int msm_qos_ctl_get(struct snd_kcontrol *kcontrol,
 			   struct snd_ctl_elem_value *ucontrol)
 {
@@ -2962,6 +2966,7 @@ static int msm_qos_ctl_put(struct snd_kcontrol *kcontrol,
 
 	return 0;
 }
+#endif
 
 const struct snd_kcontrol_new msm_common_snd_controls[] = {
 	SOC_ENUM_EXT("PROXY_RX Channels", proxy_rx_chs,
@@ -3448,8 +3453,10 @@ const struct snd_kcontrol_new msm_common_snd_controls[] = {
 	SOC_SINGLE_MULTI_EXT("QUIN_TDM_TX_7 SlotMapping",
 		SND_SOC_NOPM, 0, 0xFFFF, 0, TDM_SLOT_OFFSET_MAX,
 		tdm_tx_slot_mapping_get, tdm_tx_slot_mapping_put),
+#ifndef CONFIG_SND_SOC_MADERA
 	SOC_ENUM_EXT("MultiMedia5_RX QOS Vote", qos_vote, msm_qos_ctl_get,
 			msm_qos_ctl_put),
+#endif
 #endif
 };
 
@@ -5397,8 +5404,9 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 	const char *mclk = "qcom,msm-mclk-freq";
 	int ret = -EINVAL, id;
 	const struct of_device_id *match;
+#ifndef CONFIG_SND_SOC_MADERA
 	const char *usb_c_dt = "qcom,msm-mbhc-usbc-audio-supported";
-
+#endif
 	pdata = devm_kzalloc(&pdev->dev,
 			     sizeof(struct msm_asoc_mach_data),
 			     GFP_KERNEL);
