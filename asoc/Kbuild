@@ -116,11 +116,11 @@ endif
 
 ############ UAPI ############
 UAPI_DIR :=	uapi
-UAPI_INC :=	-I$(AUDIO_ROOT)/include/$(UAPI_DIR)
+UAPI_INC :=	-I$(AUDIO_ROOT)/include/$(UAPI_DIR) -I$(ANDROID_BUILD_TOP)/vendor/cirrus/audio/dlkm/include -I$(ANDROID_BUILD_TOP)/vendor/cirrus/audio/dlkm/sound/soc
 
 ############ COMMON ############
 COMMON_DIR :=	include
-COMMON_INC :=	-I$(AUDIO_ROOT)/$(COMMON_DIR)
+COMMON_INC :=	-I$(AUDIO_ROOT)/$(COMMON_DIR) -Ivendor/cirrus/audio/dlkm/include
 
 ############ ASoC Drivers ############
 
@@ -239,6 +239,7 @@ INCS +=		$(COMMON_INC) \
 		$(UAPI_INC)
 
 EXTRA_CFLAGS += $(INCS)
+EXTRA_CFLAGS += -I$(TOP)/vendor/cirrus/audio/dlkm/include
 
 CDEFINES +=	-DANI_LITTLE_BYTE_ENDIAN \
 		-DANI_LITTLE_BIT_ENDIAN \

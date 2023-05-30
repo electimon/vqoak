@@ -60,11 +60,6 @@
 
 static int msm_ext_spk_control = 1;
 
-#ifndef CONFIG_SND_SOC_MADERA
-static struct wcd_mbhc_config *wcd_mbhc_cfg_ptr;
-static void *def_ext_mbhc_cal(void);
-#endif
-
 struct msm_asoc_wcd93xx_codec {
 	void* (*get_afe_config_fn)(struct snd_soc_component *component,
 				   enum afe_config_type config_type);
@@ -628,42 +623,6 @@ static int msm_vi_feed_tx_ch_put(struct snd_kcontrol *kcontrol,
 	return 1;
 }
 
-#ifndef CONFIG_SND_SOC_MADERA
-static void *def_ext_mbhc_cal(void)
-{
-	void *wcd_mbhc_cal;
-	struct wcd_mbhc_btn_detect_cfg *btn_cfg;
-	u16 *btn_high;
-
-	wcd_mbhc_cal = kzalloc(WCD_MBHC_CAL_SIZE(WCD_MBHC_DEF_BUTTONS,
-				WCD9XXX_MBHC_DEF_RLOADS), GFP_KERNEL);
-	if (!wcd_mbhc_cal)
-		return NULL;
-
-#define S(X, Y) ((WCD_MBHC_CAL_PLUG_TYPE_PTR(wcd_mbhc_cal)->X) = (Y))
-	S(v_hs_max, 1600);
-#undef S
-#define S(X, Y) ((WCD_MBHC_CAL_BTN_DET_PTR(wcd_mbhc_cal)->X) = (Y))
-	S(num_btn, WCD_MBHC_DEF_BUTTONS);
-#undef S
-
-	btn_cfg = WCD_MBHC_CAL_BTN_DET_PTR(wcd_mbhc_cal);
-	btn_high = ((void *)&btn_cfg->_v_btn_low) +
-		(sizeof(btn_cfg->_v_btn_low[0]) * btn_cfg->num_btn);
-
-	btn_high[0] = 75;
-	btn_high[1] = 150;
-	btn_high[2] = 237;
-	btn_high[3] = 500;
-	btn_high[4] = 500;
-	btn_high[5] = 500;
-	btn_high[6] = 500;
-	btn_high[7] = 500;
-
-	return wcd_mbhc_cal;
-}
-#endif
-
 static inline int param_is_mask(int p)
 {
 	return (p >= SNDRV_PCM_HW_PARAM_FIRST_MASK) &&
@@ -947,23 +906,12 @@ int msm_ext_be_hw_params_fixup(struct snd_soc_pcm_runtime *rtd,
 }
 EXPORT_SYMBOL(msm_ext_be_hw_params_fixup);
 
-#ifdef CONFIG_SND_SOC_MADERA
-#ifdef CONFIG_SND_SOC_CS47L90
 #define CS47L90_SLIM_RX_MAX	8
 #define CS47L90_SLIM_TX_MAX	8
 static unsigned int msm_slim_rx_ch[CS47L90_SLIM_RX_MAX] = {144, 145, 146, 147,
 						148, 149, 150, 151};
 static unsigned int msm_slim_tx_ch[CS47L90_SLIM_TX_MAX] = {128, 129, 130, 131,
 						132, 133, 134, 135};
-#else
-#define CS47L35_SLIM_RX_MAX	6
-#define CS47L35_SLIM_TX_MAX	6
-static unsigned int msm_slim_rx_ch[CS47L35_SLIM_RX_MAX] = {144, 145, 146, 147,
-						148, 149};
-static unsigned int msm_slim_tx_ch[CS47L35_SLIM_TX_MAX] = {128, 129, 130, 131,
-						132, 133};
-#endif
-#endif
 
 /**
  * msm_snd_hw_params - hw params ops of backend dailink.
@@ -982,24 +930,11 @@ int msm_snd_hw_params(struct snd_pcm_substream *substream,
 	struct snd_soc_dai_link *dai_link = rtd->dai_link;
 
 	int ret = 0;
-#ifndef CONFIG_SND_SOC_MADERA
-	u32 rx_ch[SLIM_MAX_RX_PORTS] , tx_ch[SLIM_MAX_TX_PORTS];
-	u32 rx_ch_cnt = 0;
-#endif
 	u32  tx_ch_cnt = 0;
 	u32 user_set_tx_ch = 0;
 	u32 rx_ch_count;
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
-#ifndef CONFIG_SND_SOC_MADERA
-		ret = snd_soc_dai_get_channel_map(codec_dai,
-					&tx_ch_cnt, tx_ch, &rx_ch_cnt, rx_ch);
-		if (ret < 0) {
-			pr_err("%s: failed to get codec chan map, err:%d\n",
-				__func__, ret);
-			goto err_ch_map;
-		}
-#endif
 		if (dai_link->id == MSM_BACKEND_DAI_SLIMBUS_5_RX) {
 			pr_debug("%s: rx_5_ch=%d\n", __func__,
 				  slim_rx_cfg[5].channels);
@@ -1021,10 +956,6 @@ int msm_snd_hw_params(struct snd_pcm_substream *substream,
 				  slim_rx_cfg[0].channels);
 			rx_ch_count = slim_rx_cfg[0].channels;
 		}
-#ifndef CONFIG_SND_SOC_MADERA
-		ret = snd_soc_dai_set_channel_map(cpu_dai, 0, 0,
-						  rx_ch_count, rx_ch);
-#else
 		ret = snd_soc_dai_set_channel_map(codec_dai, 0, 0,
 						  rx_ch_count, msm_slim_rx_ch);
 		if (ret < 0) {
@@ -1035,7 +966,6 @@ int msm_snd_hw_params(struct snd_pcm_substream *substream,
 		ret = snd_soc_dai_set_channel_map(cpu_dai, 0, 0,
 						  rx_ch_count, msm_slim_rx_ch);
 
-#endif
 		if (ret < 0) {
 			pr_err("%s: failed to set cpu chan map, err:%d\n",
 				__func__, ret);
@@ -1044,15 +974,6 @@ int msm_snd_hw_params(struct snd_pcm_substream *substream,
 	} else {
 		pr_debug("%s: %s_tx_dai_id_%d_ch=%d\n", __func__,
 			 codec_dai->name, codec_dai->id, user_set_tx_ch);
-#ifndef CONFIG_SND_SOC_MADERA
-		ret = snd_soc_dai_get_channel_map(codec_dai,
-					 &tx_ch_cnt, tx_ch, &rx_ch_cnt, rx_ch);
-		if (ret < 0) {
-			pr_err("%s: failed to get codec chan map\n, err:%d\n",
-				__func__, ret);
-			goto err_ch_map;
-		}
-#endif
 		/* For <codec>_tx1 case */
 		if (dai_link->id == MSM_BACKEND_DAI_SLIMBUS_0_TX)
 			user_set_tx_ch = slim_tx_cfg[0].channels;
@@ -1065,20 +986,12 @@ int msm_snd_hw_params(struct snd_pcm_substream *substream,
 		else if (dai_link->id == MSM_BACKEND_DAI_SLIMBUS_4_TX)
 			user_set_tx_ch = msm_vi_feed_tx_ch;
 		else
-#ifndef CONFIG_SND_SOC_MADERA
-			user_set_tx_ch = tx_ch_cnt;
-#else
 			user_set_tx_ch = 1;
-#endif
 
 		pr_debug("%s: msm_slim_0_tx_ch(%d) user_set_tx_ch(%d) tx_ch_cnt(%d), id (%d)\n",
 			 __func__,  slim_tx_cfg[0].channels, user_set_tx_ch,
 			 tx_ch_cnt, dai_link->id);
 
-#ifndef CONFIG_SND_SOC_MADERA
-		ret = snd_soc_dai_set_channel_map(cpu_dai,
-						  user_set_tx_ch, tx_ch, 0, 0);
-#else
 		ret = snd_soc_dai_set_channel_map(codec_dai,
 				user_set_tx_ch,
 				msm_slim_tx_ch, 0, 0);
@@ -1088,7 +1001,6 @@ int msm_snd_hw_params(struct snd_pcm_substream *substream,
 		ret = snd_soc_dai_set_channel_map(cpu_dai,
 						user_set_tx_ch,
 						msm_slim_tx_ch, 0, 0);
-#endif
 		if (ret < 0)
 			pr_err("%s: failed to set cpu chan map, err:%d\n",
 				__func__, ret);
@@ -1212,100 +1124,6 @@ end:
 }
 EXPORT_SYMBOL(msm_snd_cpe_hw_params);
 
-#ifndef CONFIG_SND_SOC_MADERA
-static int msm_afe_set_config(struct snd_soc_component *component)
-{
-	int rc;
-	void *config_data;
-
-	pr_debug("%s: enter\n", __func__);
-
-	if (!msm_codec_fn.get_afe_config_fn) {
-		dev_err(component->dev, "%s: codec get afe config not init'ed\n",
-				__func__);
-		return -EINVAL;
-	}
-	config_data = msm_codec_fn.get_afe_config_fn(component,
-				AFE_CDC_REGISTERS_CONFIG);
-	if (config_data) {
-		rc = afe_set_config(AFE_CDC_REGISTERS_CONFIG, config_data, 0);
-		if (rc) {
-			pr_err("%s: Failed to set codec registers config %d\n",
-					__func__, rc);
-			return rc;
-		}
-	}
-
-	config_data = msm_codec_fn.get_afe_config_fn(component,
-			AFE_CDC_REGISTER_PAGE_CONFIG);
-	if (config_data) {
-		rc = afe_set_config(AFE_CDC_REGISTER_PAGE_CONFIG, config_data,
-				    0);
-		if (rc)
-			pr_err("%s: Failed to set cdc register page config\n",
-				__func__);
-	}
-
-	config_data = msm_codec_fn.get_afe_config_fn(component,
-			AFE_SLIMBUS_SLAVE_CONFIG);
-	if (config_data) {
-		rc = afe_set_config(AFE_SLIMBUS_SLAVE_CONFIG, config_data, 0);
-		if (rc) {
-			pr_err("%s: Failed to set slimbus slave config %d\n",
-					__func__, rc);
-			return rc;
-		}
-	}
-
-	config_data = msm_codec_fn.get_afe_config_fn(component,
-			AFE_AANC_VERSION);
-	if (config_data) {
-		rc = afe_set_config(AFE_AANC_VERSION, config_data, 0);
-		if (rc) {
-			pr_err("%s: Failed to set AANC version %d\n",
-					__func__, rc);
-			return rc;
-		}
-	}
-
-	config_data = msm_codec_fn.get_afe_config_fn(component,
-				AFE_CDC_CLIP_REGISTERS_CONFIG);
-	if (config_data) {
-		rc = afe_set_config(AFE_CDC_CLIP_REGISTERS_CONFIG,
-					config_data, 0);
-		if (rc) {
-			pr_err("%s: Failed to set clip registers %d\n",
-				__func__, rc);
-			return rc;
-		}
-	}
-
-	config_data = msm_codec_fn.get_afe_config_fn(component,
-			AFE_CLIP_BANK_SEL);
-	if (config_data) {
-		rc = afe_set_config(AFE_CLIP_BANK_SEL,
-				config_data, 0);
-		if (rc) {
-			pr_err("%s: Failed to set AFE bank selection %d\n",
-				__func__, rc);
-			return rc;
-		}
-	}
-
-	config_data = msm_codec_fn.get_afe_config_fn(component,
-			AFE_CDC_REGISTER_PAGE_CONFIG);
-	if (config_data) {
-		rc = afe_set_config(AFE_CDC_REGISTER_PAGE_CONFIG, config_data,
-				0);
-		if (rc)
-			pr_err("%s: Failed to set cdc register page config\n",
-					__func__);
-	}
-
-	return 0;
-}
-#endif
-
 static void msm_afe_clear_config(void)
 {
 	afe_clear_config(AFE_CDC_REGISTERS_CONFIG);
@@ -1384,14 +1202,6 @@ static int msm_adsp_power_up_config(struct snd_soc_component *component,
 		socinfo_get_id() == SDM660_SOC_SDA_ID) {
 		msm_snd_interrupt_config(pdata);
 	}
-#ifndef CONFIG_SND_SOC_MADERA
-	ret = msm_afe_set_config(component);
-
-	if (ret)
-		pr_err("%s: Failed to set AFE config. err %d\n",
-			__func__, ret);
-
-#endif
 	return 0;
 
 err_fail:
@@ -1444,6 +1254,8 @@ static int sdm660_notifier_service_cb(struct notifier_block *this,
 			component = snd_soc_rtdcom_lookup(rtd, "tavil_codec");
 		else if (!strcmp(dev_name(codec_dai->dev), "tasha_codec"))
 			component = snd_soc_rtdcom_lookup(rtd, "tasha_codec");
+		else if (!strcmp(dev_name(codec_dai->dev), "madera_codec"))
+			component = snd_soc_rtdcom_lookup(rtd, "madera_codec");
 		ret = msm_adsp_power_up_config(component, card->snd_card);
 		if (ret < 0) {
 			dev_err(card->dev,
@@ -1463,63 +1275,6 @@ static struct notifier_block service_nb = {
 	.notifier_call  = sdm660_notifier_service_cb,
 	.priority = -INT_MAX,
 };
-
-#ifndef CONFIG_SND_SOC_MADERA
-static int msm_config_hph_en0_gpio(struct snd_soc_component *component,
-					bool high)
-{
-	struct snd_soc_card *card = component->card;
-	struct msm_asoc_mach_data *pdata;
-	int val;
-
-	if (!card)
-		return 0;
-
-	pdata = snd_soc_card_get_drvdata(card);
-	if (!pdata || !gpio_is_valid(pdata->hph_en0_gpio))
-		return 0;
-
-	val = gpio_get_value_cansleep(pdata->hph_en0_gpio);
-	if ((!!val) == high)
-		return 0;
-
-	gpio_direction_output(pdata->hph_en0_gpio, (int)high);
-
-	return 1;
-}
-
-static int msm_snd_enable_codec_ext_tx_clk(struct snd_soc_component *component,
-					   int enable, bool dapm)
-{
-	int ret = 0;
-
-	if (!strcmp(dev_name(component->dev), "tasha_codec"))
-		ret = tasha_cdc_mclk_tx_enable(component, enable, dapm);
-	else {
-		dev_err(component->dev, "%s: unknown codec to enable ext clk\n",
-			__func__);
-		ret = -EINVAL;
-	}
-	return ret;
-}
-
-static int msm_ext_mclk_tx_event(struct snd_soc_dapm_widget *w,
-				 struct snd_kcontrol *kcontrol, int event)
-{
-	struct snd_soc_component *component =
-				snd_soc_dapm_to_component(w->dapm);
-
-	pr_debug("%s: event = %d\n", __func__, event);
-
-	switch (event) {
-	case SND_SOC_DAPM_PRE_PMU:
-		return msm_snd_enable_codec_ext_tx_clk(component, 1, true);
-	case SND_SOC_DAPM_POST_PMD:
-		return msm_snd_enable_codec_ext_tx_clk(component, 0, true);
-	}
-	return 0;
-}
-#endif
 
 static int msm_ext_mclk_event(struct snd_soc_dapm_widget *w,
 			      struct snd_kcontrol *kcontrol, int event)
@@ -1559,440 +1314,10 @@ static int msm_ext_mclk_event(struct snd_soc_dapm_widget *w,
 	return 0;
 }
 
-#ifndef CONFIG_SND_SOC_MADERA
-static int msm_ext_prepare_hifi(struct msm_asoc_mach_data *pdata)
-{
-	int ret = 0;
-
-	if (gpio_is_valid(pdata->hph_en1_gpio)) {
-		pr_debug("%s: hph_en1_gpio request %d\n", __func__,
-			pdata->hph_en1_gpio);
-		ret = gpio_request(pdata->hph_en1_gpio, "hph_en1_gpio");
-		if (ret) {
-			pr_err("%s: hph_en1_gpio request failed, ret:%d\n",
-				__func__, ret);
-			goto err;
-		}
-	}
-	if (gpio_is_valid(pdata->hph_en0_gpio)) {
-		pr_debug("%s: hph_en0_gpio request %d\n", __func__,
-			pdata->hph_en0_gpio);
-		ret = gpio_request(pdata->hph_en0_gpio, "hph_en0_gpio");
-		if (ret)
-			pr_err("%s: hph_en0_gpio request failed, ret:%d\n",
-				__func__, ret);
-	}
-
-err:
-	return ret;
-}
-
-static const struct snd_soc_dapm_widget msm_dapm_widgets[] = {
-
-	SND_SOC_DAPM_SUPPLY_S("MCLK", -1,  SND_SOC_NOPM, 0, 0,
-	msm_ext_mclk_event, SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
-
-	SND_SOC_DAPM_SUPPLY_S("MCLK TX", -1,  SND_SOC_NOPM, 0, 0,
-	msm_ext_mclk_tx_event, SND_SOC_DAPM_PRE_PMU | SND_SOC_DAPM_POST_PMD),
-
-	SND_SOC_DAPM_SPK("Lineout_1 amp", NULL),
-	SND_SOC_DAPM_SPK("Lineout_3 amp", NULL),
-	SND_SOC_DAPM_SPK("Lineout_2 amp", NULL),
-	SND_SOC_DAPM_SPK("Lineout_4 amp", NULL),
-	SND_SOC_DAPM_MIC("Handset Mic", NULL),
-	SND_SOC_DAPM_MIC("Headset Mic", NULL),
-	SND_SOC_DAPM_MIC("Secondary Mic", NULL),
-	SND_SOC_DAPM_MIC("ANCRight Headset Mic", NULL),
-	SND_SOC_DAPM_MIC("ANCLeft Headset Mic", NULL),
-	SND_SOC_DAPM_MIC("Analog Mic4", NULL),
-	SND_SOC_DAPM_MIC("Analog Mic6", NULL),
-	SND_SOC_DAPM_MIC("Analog Mic7", NULL),
-	SND_SOC_DAPM_MIC("Analog Mic8", NULL),
-
-	SND_SOC_DAPM_MIC("Digital Mic0", NULL),
-	SND_SOC_DAPM_MIC("Digital Mic1", NULL),
-	SND_SOC_DAPM_MIC("Digital Mic2", NULL),
-	SND_SOC_DAPM_MIC("Digital Mic3", NULL),
-	SND_SOC_DAPM_MIC("Digital Mic4", NULL),
-	SND_SOC_DAPM_MIC("Digital Mic5", NULL),
-	SND_SOC_DAPM_MIC("Digital Mic6", NULL),
-};
-
-static struct snd_soc_dapm_route wcd_audio_paths_tasha[] = {
-	{"MIC BIAS1", NULL, "MCLK TX"},
-	{"MIC BIAS2", NULL, "MCLK TX"},
-	{"MIC BIAS3", NULL, "MCLK TX"},
-	{"MIC BIAS4", NULL, "MCLK TX"},
-};
-
-static struct snd_soc_dapm_route wcd_audio_paths[] = {
-	{"MIC BIAS1", NULL, "MCLK"},
-	{"MIC BIAS2", NULL, "MCLK"},
-	{"MIC BIAS3", NULL, "MCLK"},
-	{"MIC BIAS4", NULL, "MCLK"},
-};
-
-int msm_snd_card_tasha_late_probe(struct snd_soc_card *card)
-{
-	const char *be_dl_name = LPASS_BE_SLIMBUS_0_RX;
-	struct snd_soc_pcm_runtime *rtd;
-	int ret = 0;
-	void *mbhc_calibration;
-	struct snd_soc_component *component = NULL;
-
-	rtd = snd_soc_get_pcm_runtime(card, be_dl_name);
-	if (!rtd) {
-		dev_err(card->dev,
-			"%s: snd_soc_get_pcm_runtime for %s failed!\n",
-			__func__, be_dl_name);
-		ret = -EINVAL;
-		goto err_pcm_runtime;
-	}
-
-	component = snd_soc_rtdcom_lookup(rtd, "tasha_codec");
-	if (!component) {
-		dev_err(card->dev, "%s: component is NULL\n", __func__);
-		ret = -EINVAL;
-		goto err_pcm_runtime;
-	}
-
-	mbhc_calibration = def_ext_mbhc_cal();
-	if (!mbhc_calibration) {
-		ret = -ENOMEM;
-		goto err_mbhc_cal;
-	}
-	wcd_mbhc_cfg_ptr->calibration = mbhc_calibration;
-	ret = tasha_mbhc_hs_detect(component, wcd_mbhc_cfg_ptr);
-	if (ret) {
-		dev_err(card->dev, "%s: mbhc hs detect failed, err:%d\n",
-			__func__, ret);
-		goto err_hs_detect;
-	}
-	return 0;
-
-err_hs_detect:
-	kfree(mbhc_calibration);
-err_mbhc_cal:
-err_pcm_runtime:
-	return ret;
-}
-
-int msm_snd_card_tavil_late_probe(struct snd_soc_card *card)
-{
-	const char *be_dl_name = LPASS_BE_SLIMBUS_0_RX;
-	struct snd_soc_pcm_runtime *rtd;
-	int ret = 0;
-	void *mbhc_calibration;
-	struct snd_soc_component *component = NULL;
-
-	rtd = snd_soc_get_pcm_runtime(card, be_dl_name);
-	if (!rtd) {
-		dev_err(card->dev,
-			"%s: snd_soc_get_pcm_runtime for %s failed!\n",
-			__func__, be_dl_name);
-		ret = -EINVAL;
-		goto err;
-	}
-
-	component = snd_soc_rtdcom_lookup(rtd, "tavil_codec");
-	if (!component) {
-		dev_err(card->dev, "%s: component is NULL\n", __func__);
-		ret = -EINVAL;
-		goto err;
-	}
-
-	mbhc_calibration = def_ext_mbhc_cal();
-	if (!mbhc_calibration) {
-		ret = -ENOMEM;
-		goto err;
-	}
-	wcd_mbhc_cfg_ptr->calibration = mbhc_calibration;
-	ret = tavil_mbhc_hs_detect(component, wcd_mbhc_cfg_ptr);
-	if (ret) {
-		dev_err(card->dev, "%s: mbhc hs detect failed, err:%d\n",
-			__func__, ret);
-		goto err_free_mbhc_cal;
-	}
-	return 0;
-
-err_free_mbhc_cal:
-	kfree(mbhc_calibration);
-err:
-	return ret;
-}
-
-/**
- * msm_audrx_init - Audio init function of sound card instantiate.
- *
- * @rtd: runtime dailink instance
- *
- * Returns 0 on success or ret on failure.
- */
-int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
-{
-	int ret;
-	void *config_data;
-	struct snd_soc_component *component;
-	struct snd_soc_dapm_context *dapm;
-	struct snd_soc_dai *cpu_dai = rtd->cpu_dai;
-	struct snd_soc_dai *codec_dai = rtd->codec_dai;
-	struct snd_soc_component *aux_comp;
-	struct snd_card *card = rtd->card->snd_card;
-	struct snd_info_entry *entry;
-	struct msm_asoc_mach_data *pdata =
-				snd_soc_card_get_drvdata(rtd->card);
-
-	/* Codec SLIMBUS configuration
-	 * RX1, RX2, RX3, RX4, RX5, RX6, RX7, RX8, RX9, RX10, RX11, RX12, RX13
-	 * TX1, TX2, TX3, TX4, TX5, TX6, TX7, TX8, TX9, TX10, TX11, TX12, TX13
-	 * TX14, TX15, TX16
-	 */
-	unsigned int rx_ch[TASHA_RX_MAX] = {144, 145, 146, 147, 148, 149, 150,
-					    151, 152, 153, 154, 155, 156};
-	unsigned int tx_ch[TASHA_TX_MAX]  = {128, 129, 130, 131, 132, 133,
-					     134, 135, 136, 137, 138, 139,
-					     140, 141, 142, 143};
-
-	/* Tavil Codec SLIMBUS configuration
-	 * RX1, RX2, RX3, RX4, RX5, RX6, RX7, RX8
-	 * TX1, TX2, TX3, TX4, TX5, TX6, TX7, TX8, TX9, TX10, TX11, TX12, TX13
-	 * TX14, TX15, TX16
-	 */
-	unsigned int rx_ch_tavil[WCD934X_RX_MAX] = {144, 145, 146, 147, 148,
-					    149, 150, 151};
-	unsigned int tx_ch_tavil[WCD934X_TX_MAX] = {128, 129, 130, 131, 132,
-					    133, 134, 135, 136, 137, 138,
-					    139, 140, 141, 142, 143};
-
-	pr_debug("%s: dev_name%s\n", __func__, dev_name(cpu_dai->dev));
-
-	rtd->pmdown_time = 0;
-	if (!strcmp(dev_name(codec_dai->dev), "tavil_codec"))
-		component = snd_soc_rtdcom_lookup(rtd, "tavil_codec");
-	else if (!strcmp(dev_name(codec_dai->dev), "tasha_codec"))
-		component = snd_soc_rtdcom_lookup(rtd, "tasha_codec");
-	if (!component) {
-		pr_err("%s: component is NULL\n", __func__);
-		return -EINVAL;
-	}
-	dapm = snd_soc_component_get_dapm(component);
-
-	ret = snd_soc_add_component_controls(component, msm_snd_controls,
-					 ARRAY_SIZE(msm_snd_controls));
-	if (ret < 0) {
-		pr_err("%s: add_codec_controls failed: %d\n",
-			__func__, ret);
-		return ret;
-	}
-
-	ret = snd_soc_add_component_controls(component, msm_common_snd_controls,
-					 msm_common_snd_controls_size());
-	if (ret < 0) {
-		pr_err("%s: add_common_snd_controls failed: %d\n",
-			__func__, ret);
-		return ret;
-	}
-
-	snd_soc_dapm_new_controls(dapm, msm_dapm_widgets,
-			ARRAY_SIZE(msm_dapm_widgets));
-
-	if (!strcmp(dev_name(codec_dai->dev), "tasha_codec"))
-		snd_soc_dapm_add_routes(dapm, wcd_audio_paths_tasha,
-					ARRAY_SIZE(wcd_audio_paths_tasha));
-	else
-		snd_soc_dapm_add_routes(dapm, wcd_audio_paths,
-					ARRAY_SIZE(wcd_audio_paths));
-
-	snd_soc_dapm_enable_pin(dapm, "Lineout_1 amp");
-	snd_soc_dapm_enable_pin(dapm, "Lineout_3 amp");
-	snd_soc_dapm_enable_pin(dapm, "Lineout_2 amp");
-	snd_soc_dapm_enable_pin(dapm, "Lineout_4 amp");
-
-	snd_soc_dapm_ignore_suspend(dapm, "MADINPUT");
-	snd_soc_dapm_ignore_suspend(dapm, "MAD_CPE_INPUT");
-	snd_soc_dapm_ignore_suspend(dapm, "Handset Mic");
-	snd_soc_dapm_ignore_suspend(dapm, "Headset Mic");
-	snd_soc_dapm_ignore_suspend(dapm, "Secondary Mic");
-	snd_soc_dapm_ignore_suspend(dapm, "Lineout_1 amp");
-	snd_soc_dapm_ignore_suspend(dapm, "Lineout_3 amp");
-	snd_soc_dapm_ignore_suspend(dapm, "Lineout_2 amp");
-	snd_soc_dapm_ignore_suspend(dapm, "Lineout_4 amp");
-	snd_soc_dapm_ignore_suspend(dapm, "ANCRight Headset Mic");
-	snd_soc_dapm_ignore_suspend(dapm, "ANCLeft Headset Mic");
-	snd_soc_dapm_ignore_suspend(dapm, "Digital Mic0");
-	snd_soc_dapm_ignore_suspend(dapm, "Digital Mic1");
-	snd_soc_dapm_ignore_suspend(dapm, "Digital Mic2");
-	snd_soc_dapm_ignore_suspend(dapm, "Digital Mic3");
-	snd_soc_dapm_ignore_suspend(dapm, "Digital Mic4");
-	snd_soc_dapm_ignore_suspend(dapm, "Digital Mic5");
-	snd_soc_dapm_ignore_suspend(dapm, "Analog Mic4");
-	snd_soc_dapm_ignore_suspend(dapm, "Analog Mic6");
-	snd_soc_dapm_ignore_suspend(dapm, "Analog Mic7");
-	snd_soc_dapm_ignore_suspend(dapm, "Analog Mic8");
-
-	snd_soc_dapm_ignore_suspend(dapm, "EAR");
-	snd_soc_dapm_ignore_suspend(dapm, "LINEOUT1");
-	snd_soc_dapm_ignore_suspend(dapm, "LINEOUT2");
-	snd_soc_dapm_ignore_suspend(dapm, "AMIC1");
-	snd_soc_dapm_ignore_suspend(dapm, "AMIC2");
-	snd_soc_dapm_ignore_suspend(dapm, "AMIC3");
-	snd_soc_dapm_ignore_suspend(dapm, "AMIC4");
-	snd_soc_dapm_ignore_suspend(dapm, "AMIC5");
-	snd_soc_dapm_ignore_suspend(dapm, "DMIC0");
-	snd_soc_dapm_ignore_suspend(dapm, "DMIC1");
-	snd_soc_dapm_ignore_suspend(dapm, "DMIC2");
-	snd_soc_dapm_ignore_suspend(dapm, "DMIC3");
-	snd_soc_dapm_ignore_suspend(dapm, "DMIC4");
-	snd_soc_dapm_ignore_suspend(dapm, "DMIC5");
-	snd_soc_dapm_ignore_suspend(dapm, "ANC EAR");
-	snd_soc_dapm_ignore_suspend(dapm, "SPK1 OUT");
-	snd_soc_dapm_ignore_suspend(dapm, "SPK2 OUT");
-	snd_soc_dapm_ignore_suspend(dapm, "HPHL");
-	snd_soc_dapm_ignore_suspend(dapm, "HPHR");
-	snd_soc_dapm_ignore_suspend(dapm, "AIF4 VI");
-	snd_soc_dapm_ignore_suspend(dapm, "VIINPUT");
-
-	if (!strcmp(dev_name(codec_dai->dev), "tasha_codec")) {
-		snd_soc_dapm_ignore_suspend(dapm, "LINEOUT3");
-		snd_soc_dapm_ignore_suspend(dapm, "LINEOUT4");
-		snd_soc_dapm_ignore_suspend(dapm, "ANC HPHL");
-		snd_soc_dapm_ignore_suspend(dapm, "ANC HPHR");
-		snd_soc_dapm_ignore_suspend(dapm, "ANC LINEOUT1");
-		snd_soc_dapm_ignore_suspend(dapm, "ANC LINEOUT2");
-	} else {
-		snd_soc_dapm_ignore_suspend(dapm, "MAD_CPE_OUT1");
-		snd_soc_dapm_ignore_suspend(dapm, "MAD_CPE_OUT2");
-	}
-
-	snd_soc_dapm_sync(dapm);
-
-	if (!strcmp(dev_name(codec_dai->dev), "tavil_codec")) {
-		snd_soc_dai_set_channel_map(codec_dai, ARRAY_SIZE(tx_ch_tavil),
-					tx_ch_tavil, ARRAY_SIZE(rx_ch_tavil),
-					rx_ch_tavil);
-	} else {
-		snd_soc_dai_set_channel_map(codec_dai, ARRAY_SIZE(tx_ch),
-					tx_ch, ARRAY_SIZE(rx_ch),
-					rx_ch);
-	}
-
-	if (!strcmp(dev_name(codec_dai->dev), "tavil_codec")) {
-		msm_codec_fn.get_afe_config_fn = tavil_get_afe_config;
-	} else {
-		msm_codec_fn.get_afe_config_fn = tasha_get_afe_config;
-		msm_codec_fn.mbhc_hs_detect_exit = tasha_mbhc_hs_detect_exit;
-	}
-
-	ret = msm_adsp_power_up_config(component, rtd->card->snd_card);
-	if (ret) {
-		pr_err("%s: Failed to set AFE config %d\n", __func__, ret);
-		goto err_afe_cfg;
-	}
-
-	config_data = msm_codec_fn.get_afe_config_fn(component,
-						     AFE_AANC_VERSION);
-	if (config_data) {
-		ret = afe_set_config(AFE_AANC_VERSION, config_data, 0);
-		if (ret) {
-			pr_err("%s: Failed to set aanc version %d\n",
-				__func__, ret);
-			goto err_afe_cfg;
-		}
-	}
-
-	if (!strcmp(dev_name(codec_dai->dev), "tasha_codec")) {
-		config_data = msm_codec_fn.get_afe_config_fn(component,
-						AFE_CDC_CLIP_REGISTERS_CONFIG);
-		if (config_data) {
-			ret = afe_set_config(AFE_CDC_CLIP_REGISTERS_CONFIG,
-						 config_data, 0);
-			if (ret) {
-				pr_err("%s: Failed to set clip registers %d\n",
-					__func__, ret);
-				goto err_afe_cfg;
-			}
-		}
-		config_data = msm_codec_fn.get_afe_config_fn(component,
-				AFE_CLIP_BANK_SEL);
-		if (config_data) {
-			ret = afe_set_config(AFE_CLIP_BANK_SEL, config_data, 0);
-			if (ret) {
-				pr_err("%s: Failed to set AFE bank selection %d\n",
-					__func__, ret);
-				goto err_afe_cfg;
-			}
-		}
-	}
-
-	/*
-	 * Send speaker configuration only for WSA8810.
-	 * Defalut configuration is for WSA8815.
-	 */
-	pr_debug("%s: Number of aux devices: %d\n",
-		__func__, rtd->card->num_aux_devs);
-
-	if (!strcmp(dev_name(codec_dai->dev), "tavil_codec")) {
-		if (rtd->card->num_aux_devs &&
-		    !list_empty(&rtd->card->aux_comp_list)) {
-			aux_comp = list_first_entry(&rtd->card->aux_comp_list,
-				struct snd_soc_component, card_aux_list);
-			if (!strcmp(aux_comp->name, WSA8810_NAME_1) ||
-			    !strcmp(aux_comp->name, WSA8810_NAME_2)) {
-				tavil_set_spkr_mode(component, SPKR_MODE_1);
-				tavil_set_spkr_gain_offset(component,
-							RX_GAIN_OFFSET_M1P5_DB);
-			}
-		}
-		card = rtd->card->snd_card;
-		entry = snd_info_create_subdir(card->module, "codecs",
-						 card->proc_root);
-		if (!entry) {
-			pr_debug("%s: Cannot create codecs module entry\n",
-				 __func__);
-			goto done;
-		}
-		pdata->codec_root = entry;
-		tavil_codec_info_create_codec_entry(pdata->codec_root,
-							component);
-	} else {
-		if (rtd->card->num_aux_devs &&
-		    !list_empty(&rtd->card->aux_comp_list)) {
-			aux_comp = list_first_entry(&rtd->card->aux_comp_list,
-				struct snd_soc_component, card_aux_list);
-			if (!strcmp(aux_comp->name, WSA8810_NAME_1) ||
-			    !strcmp(aux_comp->name, WSA8810_NAME_2)) {
-				tasha_set_spkr_mode(component, SPKR_MODE_1);
-				tasha_set_spkr_gain_offset(component,
-							RX_GAIN_OFFSET_M1P5_DB);
-			}
-		}
-		card = rtd->card->snd_card;
-		entry = snd_info_create_subdir(card->module, "codecs",
-						 card->proc_root);
-		if (!entry) {
-			pr_debug("%s: Cannot create codecs module entry\n",
-				 __func__);
-			goto done;
-		}
-		pdata->codec_root = entry;
-		tasha_codec_info_create_codec_entry(pdata->codec_root,
-							component);
-		tasha_mbhc_zdet_gpio_ctrl(msm_config_hph_en0_gpio,
-							component);
-	}
-done:
-	msm_set_codec_reg_done(true);
-	return 0;
-
-err_afe_cfg:
-	return ret;
-}
-#else
 int msm_audrx_init(struct snd_soc_pcm_runtime *rtd)
 {
 	return 0;
 }
-#endif
 
 EXPORT_SYMBOL(msm_audrx_init);
 
@@ -2028,14 +1353,14 @@ int msm_madera_init(struct snd_soc_pcm_runtime *rtd)
 	}
 
 	ret = snd_soc_component_set_pll(component, MADERA_FLL1_SYNCCLK,
-			MADERA_FLL_SRC_MCLK2,
-			32768, CS47L35_SYSCLK_RATE);
+			MADERA_CLK_SRC_MCLK2, 32768,
+			CS47L35_SYSCLK_RATE);
 	if (ret != 0) {
 		dev_err(codec_dai->dev, "Failed to set FLL1REFCLK %d\n", ret);
 		return ret;
 	}
 
-	ret = snd_soc_component_set_sysclk(component, MADERA_CLK_SYSCLK_1,
+	ret = snd_soc_component_set_sysclk(component, 1,
 			MADERA_CLK_SRC_FLL1, CS47L35_SYSCLK_RATE,
 			SND_SOC_CLOCK_IN);
 	if (ret != 0) {
@@ -2088,7 +1413,6 @@ int msm_madera_init(struct snd_soc_pcm_runtime *rtd)
 		dev_err(codec_dai->dev, "Failed to add audio routes %d\n", ret);
 		return ret;
 	}
-#ifdef CONFIG_SND_SOC_CS47L90
 	/* Toggle PDM_CLK GPIO */
 	for (i = 0; i < 5; i++) {
 		snd_soc_component_write(component, MADERA_GPIO37_CTRL_1, 0xA001);
@@ -2096,14 +1420,6 @@ int msm_madera_init(struct snd_soc_pcm_runtime *rtd)
 		snd_soc_component_write(component, MADERA_GPIO37_CTRL_1, 0x2001);
 		usleep_range(1000, 1100);
 	}
-#else
-	for (i = 0; i < 5; i++) {
-		snd_soc_component_write(component, MADERA_GPIO6_CTRL_1, 0xA001);
-		usleep_range(1000, 1100);
-		snd_soc_component_write(component, MADERA_GPIO6_CTRL_1, 0x2001);
-		usleep_range(1000, 1100);
-	}
-#endif
 
 	/* Ensures that GPIO3 is set to an output clock. */
 #ifdef SND_SOC_CS47L35
@@ -2132,17 +1448,12 @@ int msm_madera_init(struct snd_soc_pcm_runtime *rtd)
 	snd_soc_dapm_ignore_suspend(dapm, "AIF1TX2");
 	snd_soc_dapm_ignore_suspend(dapm, "AIF1RX1");
 	snd_soc_dapm_ignore_suspend(dapm, "AIF1RX2");
-#ifdef CONFIG_SND_SOC_CS47L90
 	snd_soc_dapm_ignore_suspend(dapm, "IN2AL");
 	snd_soc_dapm_ignore_suspend(dapm, "IN2BL");
 	snd_soc_dapm_ignore_suspend(dapm, "HPOUT1L");
 	snd_soc_dapm_ignore_suspend(dapm, "HPOUT1R");
 	snd_soc_dapm_ignore_suspend(dapm, "HPOUT2L");
 	snd_soc_dapm_ignore_suspend(dapm, "HPOUT2R");
-#else
-	snd_soc_dapm_ignore_suspend(dapm, "HPOUTL");
-	snd_soc_dapm_ignore_suspend(dapm, "HPOUTR");
-#endif
 	snd_soc_dapm_ignore_suspend(dapm, "SPKOUTN");
 	snd_soc_dapm_ignore_suspend(dapm, "SPKOUTP");
 
@@ -2196,13 +1507,6 @@ int msm_ext_cdc_init(struct platform_device *pdev,
 	int ret = 0;
 
 	pdev->id = 0;
-#ifndef CONFIG_SND_SOC_MADERA
-	wcd_mbhc_cfg_ptr = wcd_mbhc_cfg_ptr1;
-	wcd_mbhc_cfg_ptr->moisture_en = true;
-	wcd_mbhc_cfg_ptr->mbhc_micbias = MIC_BIAS_2;
-	wcd_mbhc_cfg_ptr->anc_micbias = MIC_BIAS_2;
-	wcd_mbhc_cfg_ptr->enable_anc_mic_detect = false;
-#endif
 
 	*card = populate_snd_card_dailinks(&pdev->dev, pdata->snd_card_val);
 	if (!(*card)) {
@@ -2212,34 +1516,6 @@ int msm_ext_cdc_init(struct platform_device *pdev,
 	}
 	platform_set_drvdata(pdev, *card);
 	snd_soc_card_set_drvdata(*card, pdata);
-#ifndef CONFIG_SND_SOC_MADERA
-	pdata->hph_en1_gpio = of_get_named_gpio(pdev->dev.of_node,
-						"qcom,hph-en1-gpio", 0);
-	if (!gpio_is_valid(pdata->hph_en1_gpio))
-		pdata->hph_en1_gpio_p = of_parse_phandle(pdev->dev.of_node,
-					"qcom,hph-en1-gpio", 0);
-	if (!gpio_is_valid(pdata->hph_en1_gpio) && (!pdata->hph_en1_gpio_p)) {
-		dev_dbg(&pdev->dev, "property %s not detected in node %s",
-			"qcom,hph-en1-gpio", pdev->dev.of_node->full_name);
-	}
-
-	pdata->hph_en0_gpio = of_get_named_gpio(pdev->dev.of_node,
-						"qcom,hph-en0-gpio", 0);
-	if (!gpio_is_valid(pdata->hph_en0_gpio))
-		pdata->hph_en0_gpio_p = of_parse_phandle(pdev->dev.of_node,
-					"qcom,hph-en0-gpio", 0);
-	if (!gpio_is_valid(pdata->hph_en0_gpio) && (!pdata->hph_en0_gpio_p)) {
-		dev_dbg(&pdev->dev, "property %s not detected in node %s",
-			"qcom,hph-en0-gpio", pdev->dev.of_node->full_name);
-	}
-
-	ret = msm_ext_prepare_hifi(pdata);
-	if (ret) {
-		dev_dbg(&pdev->dev, "msm_ext_prepare_hifi failed (%d)\n",
-			ret);
-		ret = 0;
-	}
-#endif
 	pdata->msm_snd_intr_lpi.mpm_wakeup =
 		ioremap(TLMM_CENTER_MPM_WAKEUP_INT_EN_0, 4);
 	pdata->msm_snd_intr_lpi.intr1_cfg_apps =

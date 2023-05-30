@@ -214,16 +214,6 @@ static u32 mi2s_ebit_clk[MI2S_MAX] = {
 	Q6AFE_LPASS_CLK_ID_QUAD_MI2S_EBIT,
 	Q6AFE_LPASS_CLK_ID_QUI_MI2S_EBIT
 };
-#ifndef CONFIG_SND_SOC_MADERA
-struct msm_wsa881x_dev_info {
-	struct device_node *of_node;
-	u32 index;
-};
-static struct snd_soc_aux_dev *msm_aux_dev;
-static struct snd_soc_codec_conf *msm_codec_conf;
-
-static bool msm_swap_gnd_mic(struct snd_soc_component *component, bool active);
-#endif
 
 static struct wcd_mbhc_config mbhc_cfg = {
 	.read_fw_bin = false,
@@ -321,7 +311,7 @@ static char const *usb_sample_rate_text[] = {"KHZ_8", "KHZ_11P025",
 static char const *ext_disp_bit_format_text[] = {"S16_LE", "S24_LE"};
 static char const *ext_disp_sample_rate_text[] = {"KHZ_48", "KHZ_96",
 						  "KHZ_192"};
-static const char *const qos_text[] = {"Disable", "Enable"};
+//static const char *const qos_text[] = {"Disable", "Enable"};
 
 static SOC_ENUM_SINGLE_EXT_DECL(ext_disp_rx_chs, ch_text);
 static SOC_ENUM_SINGLE_EXT_DECL(proxy_rx_chs, ch_text);
@@ -382,11 +372,7 @@ static SOC_ENUM_SINGLE_EXT_DECL(tdm_rx_format, tdm_bit_format_text);
 static SOC_ENUM_SINGLE_EXT_DECL(tdm_rx_sample_rate, tdm_sample_rate_text);
 static SOC_ENUM_SINGLE_EXT_DECL(tdm_slot_num, tdm_slot_num_text);
 static SOC_ENUM_SINGLE_EXT_DECL(tdm_slot_width, tdm_slot_width_text);
-static SOC_ENUM_SINGLE_EXT_DECL(qos_vote, qos_text);
-
-#ifndef CONFIG_SND_SOC_MADERA
-static int qos_vote_status;
-#endif
+//static SOC_ENUM_SINGLE_EXT_DECL(qos_vote, qos_text);
 
 static struct afe_clk_set mi2s_clk[MI2S_MAX] = {
 	{
@@ -2918,60 +2904,6 @@ static int ext_disp_rx_sample_rate_put(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
-#ifdef CONFIG_SND_SOC_QCOM_TDM
-static int msm_qos_ctl_get(struct snd_kcontrol *kcontrol,
-			   struct snd_ctl_elem_value *ucontrol)
-{
-	ucontrol->value.enumerated.item[0] = qos_vote_status;
-
-	return 0;
-}
-
-static int msm_qos_ctl_put(struct snd_kcontrol *kcontrol,
-			   struct snd_ctl_elem_value *ucontrol)
-{
-	struct snd_soc_component *component =
-				snd_soc_kcontrol_component(kcontrol);
-	struct snd_soc_card *card = component->card;
-	const char *fe_name = MSM_DAILINK_NAME(LowLatency);
-	struct snd_soc_pcm_runtime *rtd;
-	struct snd_pcm_substream *substream;
-	s32 usecs;
-
-	rtd = snd_soc_get_pcm_runtime(card, fe_name);
-	if (!rtd) {
-		pr_err("%s: fail to get pcm runtime for %s\n",
-			__func__, fe_name);
-		return -EINVAL;
-	}
-
-	substream = rtd->pcm->streams[SNDRV_PCM_STREAM_PLAYBACK].substream;
-	if (!substream) {
-		pr_err("%s: substream is null\n", __func__);
-		return -EINVAL;
-	}
-
-	qos_vote_status = ucontrol->value.enumerated.item[0];
-	if (qos_vote_status) {
-		if (pm_qos_request_active(&substream->latency_pm_qos_req))
-			pm_qos_remove_request(&substream->latency_pm_qos_req);
-		if (!substream->runtime) {
-			pr_err("%s: runtime is null\n", __func__);
-			return -EINVAL;
-		}
-		usecs = MSM_LL_QOS_VALUE;
-		if (usecs >= 0)
-			pm_qos_add_request(&substream->latency_pm_qos_req,
-					PM_QOS_CPU_DMA_LATENCY, usecs);
-	} else {
-		if (pm_qos_request_active(&substream->latency_pm_qos_req))
-			pm_qos_remove_request(&substream->latency_pm_qos_req);
-	}
-
-	return 0;
-}
-#endif
-
 const struct snd_kcontrol_new msm_common_snd_controls[] = {
 	SOC_ENUM_EXT("PROXY_RX Channels", proxy_rx_chs,
 			proxy_rx_ch_get, proxy_rx_ch_put),
@@ -3457,8 +3389,6 @@ const struct snd_kcontrol_new msm_common_snd_controls[] = {
 	SOC_SINGLE_MULTI_EXT("QUIN_TDM_TX_7 SlotMapping",
 		SND_SOC_NOPM, 0, 0xFFFF, 0, TDM_SLOT_OFFSET_MAX,
 		tdm_tx_slot_mapping_get, tdm_tx_slot_mapping_put),
-	SOC_ENUM_EXT("MultiMedia5_RX QOS Vote", qos_vote, msm_qos_ctl_get,
-			msm_qos_ctl_put),
 #endif
 };
 
@@ -4851,149 +4781,6 @@ void msm_tdm_snd_shutdown(struct snd_pcm_substream *substream)
 EXPORT_SYMBOL(msm_tdm_snd_shutdown);
 
 
-#ifndef CONFIG_SND_SOC_MADERA
-/* Validate whether US EU switch is present or not */
-static int msm_prepare_us_euro(struct snd_soc_card *card)
-{
-	struct msm_asoc_mach_data *pdata =
-				snd_soc_card_get_drvdata(card);
-	int ret = 0;
-
-	if (pdata->us_euro_gpio >= 0) {
-		dev_dbg(card->dev, "%s: us_euro gpio request %d", __func__,
-			pdata->us_euro_gpio);
-		ret = gpio_request(pdata->us_euro_gpio, "TASHA_CODEC_US_EURO");
-		if (ret) {
-			dev_err(card->dev,
-				"%s: Failed to request codec US/EURO gpio %d error %d\n",
-				__func__, pdata->us_euro_gpio, ret);
-		}
-	}
-
-	return ret;
-}
-
-
-static bool msm_usbc_swap_gnd_mic(struct snd_soc_component *component,
-					bool active)
-{
-	int value = 0;
-	bool ret = false;
-	struct snd_soc_card *card = component->card;
-	struct msm_asoc_mach_data *pdata = snd_soc_card_get_drvdata(card);
-	struct pinctrl_state *en2_pinctrl_active;
-	struct pinctrl_state *en2_pinctrl_sleep;
-
-	if (!pdata->usbc_en2_gpio_p) {
-		if (active) {
-			/* if active and usbc_en2_gpio undefined, get pin */
-			pdata->usbc_en2_gpio_p = devm_pinctrl_get(card->dev);
-			if (IS_ERR_OR_NULL(pdata->usbc_en2_gpio_p)) {
-				dev_err(card->dev,
-					"%s: Can't get EN2 gpio pinctrl:%ld\n",
-					__func__,
-					PTR_ERR(pdata->usbc_en2_gpio_p));
-				pdata->usbc_en2_gpio_p = NULL;
-				return false;
-			}
-		} else {
-			/* if not active and usbc_en2_gpio undefined, return */
-			return false;
-		}
-	}
-
-	pdata->usbc_en2_gpio = of_get_named_gpio(card->dev->of_node,
-				    "qcom,usbc-analog-en2-gpio", 0);
-	if (!gpio_is_valid(pdata->usbc_en2_gpio)) {
-		dev_err(card->dev, "%s, property %s not in node %s\n",
-			__func__, "qcom,usbc-analog-en2-gpio",
-			card->dev->of_node->full_name);
-		return false;
-	}
-
-	en2_pinctrl_active = pinctrl_lookup_state(
-					pdata->usbc_en2_gpio_p, "aud_active");
-	if (IS_ERR_OR_NULL(en2_pinctrl_active)) {
-		dev_err(card->dev,
-			"%s: Cannot get aud_active pinctrl state:%ld\n",
-			__func__, PTR_ERR(en2_pinctrl_active));
-		ret = false;
-		goto err_lookup_state;
-	}
-
-	en2_pinctrl_sleep = pinctrl_lookup_state(
-					pdata->usbc_en2_gpio_p, "aud_sleep");
-	if (IS_ERR_OR_NULL(en2_pinctrl_sleep)) {
-		dev_err(card->dev,
-			"%s: Cannot get aud_sleep pinctrl state:%ld\n",
-			__func__, PTR_ERR(en2_pinctrl_sleep));
-		ret = false;
-		goto err_lookup_state;
-	}
-
-	/* if active and usbc_en2_gpio_p defined, swap using usbc_en2_gpio_p */
-	if (active) {
-		dev_dbg(component->dev, "%s: enter\n", __func__);
-		if (pdata->usbc_en2_gpio_p) {
-			value = gpio_get_value_cansleep(pdata->usbc_en2_gpio);
-			if (value)
-				pinctrl_select_state(pdata->usbc_en2_gpio_p,
-							en2_pinctrl_sleep);
-			else
-				pinctrl_select_state(pdata->usbc_en2_gpio_p,
-							en2_pinctrl_active);
-		} else if (pdata->usbc_en2_gpio >= 0) {
-			value = gpio_get_value_cansleep(pdata->usbc_en2_gpio);
-			gpio_set_value_cansleep(pdata->usbc_en2_gpio, !value);
-		}
-		pr_debug("%s: swap select switch %d to %d\n", __func__,
-			value, !value);
-		ret = true;
-	} else {
-		/* if not active, release usbc_en2_gpio_p pin */
-		pinctrl_select_state(pdata->usbc_en2_gpio_p,
-					en2_pinctrl_sleep);
-	}
-
-err_lookup_state:
-	devm_pinctrl_put(pdata->usbc_en2_gpio_p);
-	pdata->usbc_en2_gpio_p = NULL;
-	return ret;
-}
-
-static bool msm_swap_gnd_mic(struct snd_soc_component *component, bool active)
-{
-	struct snd_soc_card *card = component->card;
-	struct msm_asoc_mach_data *pdata =
-				snd_soc_card_get_drvdata(card);
-	int value = 0;
-	bool ret = 0;
-
-	if (!mbhc_cfg.enable_usbc_analog) {
-		if (pdata->us_euro_gpio_p) {
-			value = msm_cdc_pinctrl_get_state(
-						pdata->us_euro_gpio_p);
-			if (value)
-				msm_cdc_pinctrl_select_sleep_state(
-							pdata->us_euro_gpio_p);
-			else
-				msm_cdc_pinctrl_select_active_state(
-							pdata->us_euro_gpio_p);
-		} else if (pdata->us_euro_gpio >= 0) {
-			value = gpio_get_value_cansleep(pdata->us_euro_gpio);
-			gpio_set_value_cansleep(pdata->us_euro_gpio, !value);
-		}
-		pr_debug("%s: swap select switch %d to %d\n",
-			  __func__, value, !value);
-		ret = true;
-	} else {
-		/* if usbc is defined, swap using usbc_en2 */
-		ret = msm_usbc_swap_gnd_mic(component, active);
-	}
-	return ret;
-}
-#endif
-
 static int msm_populate_dai_link_component_of_node(
 		struct msm_asoc_mach_data *pdata,
 		struct snd_soc_card *card)
@@ -5105,244 +4892,6 @@ err:
 	return ret;
 }
 
-#ifndef CONFIG_SND_SOC_MADERA
-static int msm_wsa881x_init(struct snd_soc_component *component)
-{
-	u8 spkleft_ports[WSA881X_MAX_SWR_PORTS] = {100, 101, 102, 106};
-	u8 spkright_ports[WSA881X_MAX_SWR_PORTS] = {103, 104, 105, 107};
-	unsigned int ch_rate[WSA881X_MAX_SWR_PORTS] = {2400, 600, 300, 1200};
-	unsigned int ch_mask[WSA881X_MAX_SWR_PORTS] = {0x1, 0xF, 0x3, 0x3};
-	struct msm_asoc_mach_data *pdata;
-	struct snd_soc_dapm_context *dapm =
-			snd_soc_component_get_dapm(component);
-
-	if (!component) {
-		pr_err("%s codec is NULL\n", __func__);
-		return -EINVAL;
-	}
-
-	if (!strcmp(component->name_prefix, "SpkrLeft")) {
-		dev_dbg(component->dev, "%s: setting left ch map to codec %s\n",
-				__func__, component->name);
-		wsa881x_set_channel_map(component, &spkleft_ports[0],
-				WSA881X_MAX_SWR_PORTS, &ch_mask[0],
-				&ch_rate[0], NULL);
-		if (dapm->component) {
-			snd_soc_dapm_ignore_suspend(dapm, "SpkrLeft IN");
-			snd_soc_dapm_ignore_suspend(dapm, "SpkrLeft SPKR");
-		}
-	} else if (!strcmp(component->name_prefix, "SpkrRight")) {
-		dev_dbg(component->dev, "%s: setting right ch map to codec %s\n",
-				__func__, component->name);
-		wsa881x_set_channel_map(component, &spkright_ports[0],
-				WSA881X_MAX_SWR_PORTS, &ch_mask[0],
-				&ch_rate[0], NULL);
-		if (dapm->component) {
-			snd_soc_dapm_ignore_suspend(dapm, "SpkrRight IN");
-			snd_soc_dapm_ignore_suspend(dapm, "SpkrRight SPKR");
-		}
-	} else {
-		dev_err(component->dev, "%s: wrong codec name %s\n", __func__,
-				component->name);
-		return -EINVAL;
-	}
-
-
-	pdata = snd_soc_card_get_drvdata(component->card);
-	if (pdata && pdata->codec_root)
-		wsa881x_codec_info_create_codec_entry(pdata->codec_root,
-						      component);
-	return 0;
-}
-
-
-static int msm_init_wsa_dev(struct platform_device *pdev,
-			    struct snd_soc_card *card)
-{
-	struct device_node *wsa_of_node;
-	u32 wsa_max_devs;
-	u32 wsa_dev_cnt;
-	char *dev_name_str = NULL;
-	struct msm_wsa881x_dev_info *wsa881x_dev_info;
-	const char *wsa_auxdev_name_prefix[1];
-	int found = 0;
-	int i;
-	int ret;
-
-	/* Get maximum WSA device count for this platform */
-	ret = of_property_read_u32(pdev->dev.of_node,
-					"qcom,wsa-max-devs", &wsa_max_devs);
-	if (ret) {
-		dev_dbg(&pdev->dev,
-			"%s: wsa-max-devs property missing in DT %s, ret = %d\n",
-			__func__, pdev->dev.of_node->full_name, ret);
-		goto err_dt;
-	}
-	if (wsa_max_devs == 0) {
-		dev_warn(&pdev->dev,
-			"%s: Max WSA devices is 0 for this target?\n",
-			__func__);
-		goto err_dt;
-				}
-
-	/* Get count of WSA device phandles for this platform */
-	wsa_dev_cnt = of_count_phandle_with_args(pdev->dev.of_node,
-						"qcom,wsa-devs", NULL);
-	if (wsa_dev_cnt == -ENOENT) {
-		dev_warn(&pdev->dev, "%s: No wsa device defined in DT.\n",
-			__func__);
-		goto err_dt;
-	} else if (wsa_dev_cnt <= 0) {
-		dev_err(&pdev->dev,
-			"%s: Error reading wsa device from DT. wsa_dev_cnt = %d\n",
-			__func__, wsa_dev_cnt);
-		ret = -EINVAL;
-		goto err_dt;
-	}
-
-	/*
-	 * Expect total phandles count to be NOT less than maximum possible
-	 * WSA count. However, if it is less, then assign same value to
-	 * max count as well.
-	 */
-	if (wsa_dev_cnt < wsa_max_devs) {
-		dev_dbg(&pdev->dev,
-			"%s: wsa_max_devs = %d cannot exceed wsa_dev_cnt = %d\n",
-			__func__, wsa_max_devs, wsa_dev_cnt);
-		wsa_max_devs = wsa_dev_cnt;
-	}
-
-	/* Make sure prefix string passed for each WSA device */
-	ret = of_property_count_strings(pdev->dev.of_node,
-			"qcom,wsa-aux-dev-prefix");
-	if (ret != wsa_dev_cnt) {
-		dev_err(&pdev->dev,
-			"%s: expecting %d wsa prefix. Defined only %d in DT\n",
-			__func__, wsa_dev_cnt, ret);
-		ret = -EINVAL;
-		goto err_dt;
-	}
-
-	/*
-	 * Alloc mem to store phandle and index info of WSA device, if already
-	 * registered with ALSA core
-	 */
-	wsa881x_dev_info = devm_kcalloc(&pdev->dev, wsa_max_devs,
-					sizeof(struct msm_wsa881x_dev_info),
-					GFP_KERNEL);
-	if (!wsa881x_dev_info) {
-		ret = -ENOMEM;
-		goto err_mem;
-	}
-
-	/*
-	 * search and check whether all WSA devices are already
-	 * registered with ALSA core or not. If found a node, store
-	 * the node and the index in a local array of struct for later
-	 * use.
-	 */
-	for (i = 0; i < wsa_dev_cnt; i++) {
-		wsa_of_node = of_parse_phandle(pdev->dev.of_node,
-					       "qcom,wsa-devs", i);
-		if (unlikely(!wsa_of_node)) {
-			/* we should not be here */
-			dev_err(&pdev->dev,
-				"%s: wsa dev node is not present\n",
-				__func__);
-			ret = -EINVAL;
-			goto err_dev_node;
-		}
-		if (soc_find_component(wsa_of_node, NULL)) {
-			/* WSA device registered with ALSA core */
-			wsa881x_dev_info[found].of_node = wsa_of_node;
-			wsa881x_dev_info[found].index = i;
-			found++;
-			if (found == wsa_max_devs)
-				break;
-		}
-	}
-
-	if (found < wsa_max_devs) {
-		dev_dbg(&pdev->dev,
-			"%s: failed to find %d components. Found only %d\n",
-			__func__, wsa_max_devs, found);
-		return -EPROBE_DEFER;
-	}
-	dev_info(&pdev->dev,
-		"%s: found %d wsa881x devices registered with ALSA core\n",
-		__func__, found);
-
-	card->num_aux_devs = wsa_max_devs;
-	card->num_configs = wsa_max_devs;
-
-	/* Alloc array of AUX devs struct */
-	msm_aux_dev = devm_kcalloc(&pdev->dev, card->num_aux_devs,
-				   sizeof(struct snd_soc_aux_dev),
-				   GFP_KERNEL);
-	if (!msm_aux_dev) {
-		ret = -ENOMEM;
-		goto err_auxdev_mem;
-	}
-
-	/* Alloc array of codec conf struct */
-	msm_codec_conf = devm_kcalloc(&pdev->dev, card->num_aux_devs,
-				      sizeof(struct snd_soc_codec_conf),
-				      GFP_KERNEL);
-	if (!msm_codec_conf) {
-		ret = -ENOMEM;
-		goto err_codec_conf;
-	}
-
-	for (i = 0; i < card->num_aux_devs; i++) {
-		dev_name_str = devm_kzalloc(&pdev->dev, DEV_NAME_STR_LEN,
-					    GFP_KERNEL);
-		if (!dev_name_str) {
-			ret = -ENOMEM;
-			goto err_dev_str;
-		}
-
-		ret = of_property_read_string_index(pdev->dev.of_node,
-						    "qcom,wsa-aux-dev-prefix",
-						    wsa881x_dev_info[i].index,
-						    wsa_auxdev_name_prefix);
-		if (ret) {
-			dev_err(&pdev->dev,
-				"%s: failed to read wsa aux dev prefix, ret = %d\n",
-				__func__, ret);
-			ret = -EINVAL;
-			goto err_dt_prop;
-		}
-
-		snprintf(dev_name_str, strlen("wsa881x.%d"), "wsa881x.%d", i);
-		msm_aux_dev[i].name = dev_name_str;
-		msm_aux_dev[i].codec_name = NULL;
-		msm_aux_dev[i].codec_of_node =
-			wsa881x_dev_info[i].of_node;
-		msm_aux_dev[i].init = msm_wsa881x_init;
-		msm_codec_conf[i].dev_name = NULL;
-		msm_codec_conf[i].name_prefix = wsa_auxdev_name_prefix[0];
-		msm_codec_conf[i].of_node = wsa881x_dev_info[i].of_node;
-	}
-	card->codec_conf = msm_codec_conf;
-	card->aux_dev = msm_aux_dev;
-	return 0;
-
-err_dt_prop:
-	devm_kfree(&pdev->dev, dev_name_str);
-err_dev_str:
-	devm_kfree(&pdev->dev, msm_codec_conf);
-err_codec_conf:
-	devm_kfree(&pdev->dev, msm_aux_dev);
-err_auxdev_mem:
-err_dev_node:
-	devm_kfree(&pdev->dev, wsa881x_dev_info);
-err_mem:
-err_dt:
-	return ret;
-}
-
-#endif
-
 static void i2s_auxpcm_init(struct platform_device *pdev)
 {
 	int count;
@@ -5406,9 +4955,6 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 	const char *mclk = "qcom,msm-mclk-freq";
 	int ret = -EINVAL, id;
 	const struct of_device_id *match;
-#ifndef CONFIG_SND_SOC_MADERA
-	const char *usb_c_dt = "qcom,msm-mbhc-usbc-audio-supported";
-#endif
 	pdata = devm_kzalloc(&pdev->dev,
 			     sizeof(struct msm_asoc_mach_data),
 			     GFP_KERNEL);
@@ -5476,34 +5022,6 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 					"qcom,quat-mi2s-gpios", 0);
 	pdata->mi2s_gpio_p[QUIN_MI2S] = of_parse_phandle(pdev->dev.of_node,
 					"qcom,quin-mi2s-gpios", 0);
-#ifndef CONFIG_SND_SOC_MADERA
-	/*
-	 * Parse US-Euro gpio info from DT. Report no error if us-euro
-	 * entry is not found in DT file as some targets do not support
-	 * US-Euro detection
-	 */
-	pdata->us_euro_gpio = of_get_named_gpio(pdev->dev.of_node,
-				"qcom,us-euro-gpios", 0);
-	if (!gpio_is_valid(pdata->us_euro_gpio))
-		pdata->us_euro_gpio_p = of_parse_phandle(pdev->dev.of_node,
-					"qcom,us-euro-gpios", 0);
-	if (!gpio_is_valid(pdata->us_euro_gpio) && (!pdata->us_euro_gpio_p)) {
-		dev_dbg(&pdev->dev, "property %s not detected in node %s",
-			"qcom,us-euro-gpios", pdev->dev.of_node->full_name);
-	} else {
-		dev_dbg(&pdev->dev, "%s detected",
-			"qcom,us-euro-gpios");
-		mbhc_cfg.swap_gnd_mic = msm_swap_gnd_mic;
-	}
-
-	if (of_find_property(pdev->dev.of_node, usb_c_dt, NULL))
-		mbhc_cfg.swap_gnd_mic = msm_swap_gnd_mic;
-
-	ret = msm_prepare_us_euro(card);
-	if (ret)
-		dev_dbg(&pdev->dev, "msm_prepare_us_euro failed (%d)\n",
-			ret);
-#endif
 	i2s_auxpcm_init(pdev);
 
 	ret = snd_soc_of_parse_audio_routing(card, "qcom,audio-routing");
@@ -5514,14 +5032,6 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 		ret = -EPROBE_DEFER;
 		goto err;
 	}
-
-#ifndef CONFIG_SND_SOC_MADERA
-	if (!of_property_read_bool(pdev->dev.of_node, "qcom,wsa-disable")) {
-		ret = msm_init_wsa_dev(pdev, card);
-		if (ret)
-			goto err;
-	}
-#endif
 
 	ret = devm_snd_soc_register_card(&pdev->dev, card);
 	if (ret == -EPROBE_DEFER) {
@@ -5546,25 +5056,6 @@ static int msm_asoc_machine_probe(struct platform_device *pdev)
 		__func__);
 	return 0;
 err:
-#ifndef CONFIG_SND_SOC_MADERA
-	if (pdata->us_euro_gpio > 0) {
-		dev_dbg(&pdev->dev, "%s free us_euro gpio %d\n",
-			__func__, pdata->us_euro_gpio);
-		pdata->us_euro_gpio = 0;
-	}
-	if (pdata->hph_en1_gpio > 0) {
-		dev_dbg(&pdev->dev, "%s free hph_en1_gpio %d\n",
-			__func__, pdata->hph_en1_gpio);
-		gpio_free(pdata->hph_en1_gpio);
-		pdata->hph_en1_gpio = 0;
-	}
-	if (pdata->hph_en0_gpio > 0) {
-		dev_dbg(&pdev->dev, "%s free hph_en0_gpio %d\n",
-			__func__, pdata->hph_en0_gpio);
-		gpio_free(pdata->hph_en0_gpio);
-		pdata->hph_en0_gpio = 0;
-	}
-#endif
 	if (pdata->snd_card_val != INT_SND_CARD)
 		msm_ext_cdc_deinit(pdata);
 	devm_kfree(&pdev->dev, pdata);
@@ -5578,21 +5069,6 @@ static int msm_asoc_machine_remove(struct platform_device *pdev)
 
 	if (pdata->snd_card_val == INT_SND_CARD)
 		mutex_destroy(&pdata->cdc_int_mclk0_mutex);
-
-#ifndef CONFIG_SND_SOC_MADERA
-	if (gpio_is_valid(pdata->us_euro_gpio)) {
-		gpio_free(pdata->us_euro_gpio);
-		pdata->us_euro_gpio = 0;
-	}
-	if (gpio_is_valid(pdata->hph_en1_gpio)) {
-		gpio_free(pdata->hph_en1_gpio);
-		pdata->hph_en1_gpio = 0;
-	}
-	if (gpio_is_valid(pdata->hph_en0_gpio)) {
-		gpio_free(pdata->hph_en0_gpio);
-		pdata->hph_en0_gpio = 0;
-	}
-#endif
 
 	if (pdata->snd_card_val != INT_SND_CARD) {
 		audio_notifier_deregister("sdm660");
