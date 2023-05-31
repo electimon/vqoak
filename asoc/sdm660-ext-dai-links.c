@@ -466,7 +466,6 @@ static int cs35l35_dai_init(struct snd_soc_pcm_runtime *rtd)
 	ret = snd_soc_component_set_sysclk(component, 0, 0, codec_clock, 0);
 	if (ret != 0) {
 		dev_err(component->dev, "Failed to set MCLK %d\n", ret);
-		return ret;
 	}
 	snd_soc_dapm_ignore_suspend(dapm, "AMP Playback");
 #ifdef CONFIG_SND_SOC_CS35L36
